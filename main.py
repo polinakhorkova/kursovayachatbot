@@ -47,6 +47,21 @@ def load_icd_codes():
 MEDICAL_TERMS = load_medical_terms()
 ICD_CODES = load_icd_codes()
 
+def test_db_connection():
+    try:
+        conn = psycopg2.connect(
+            dbname="postgres",
+            user="myuser",
+            password="polina",
+            host="192.168.0.6",
+            port="5432"
+        )
+        if conn.status == psycopg2.extensions.STATUS_READY:
+            print("Успешно подключились к базе данных PostgreSQL!")
+        conn.close()
+    except Exception as e:
+        print(f"Ошибка подключения к БД: {e}")
+
 # 🔌 Функция для сохранения ФИО пациента в базу данных
 def insert_patient_to_db(fio):
     try:
@@ -58,15 +73,15 @@ def insert_patient_to_db(fio):
         last_name, first_name, middle_name = parts
 
         conn = psycopg2.connect(
-            dbname="telegram_db",
-            user="postgres",
+            dbname="postgres",
+            user="myuser",
             password="polina",
-            host=" 92.255.129.108",
+            host="192.168.0.6",
             port="5432"
         )
         cursor = conn.cursor()
         cursor.execute(
-            "INSERT INTO пациент (фамилия, имя, отчество) VALUES (%s, %s, %s);",
+            "INSERT INTO пациенты (фамилия, имя, отчество) VALUES (%s, %s, %s);",
             (last_name, first_name, middle_name)
         )
         conn.commit()
@@ -177,8 +192,10 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # 🚀 Запуск бота
 async def main():
+    
     TOKEN = '7903839198:AAHD7_C1qic4ic9Xc8ei53XVSOAoOmZ_Bi8'  # Обязательно замени на актуальный токен
     app = ApplicationBuilder().token(TOKEN).build()
+    
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
@@ -187,6 +204,8 @@ async def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     print("Бот запущен. Нажмите Ctrl+C для остановки.")
+  
+
     try:
         await app.initialize()
         await app.start()
@@ -201,4 +220,5 @@ async def main():
         await app.shutdown()
 
 if __name__ == '__main__':
+    test_db_connection()
     asyncio.run(main())
