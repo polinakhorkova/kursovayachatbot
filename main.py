@@ -291,28 +291,28 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data.clear()
 
 async def terms_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['state'] = None  # сбрасываем состояние
     if not context.args:
-        await update.message.reply_text("Введите термин, чтобы получить определение.")
-        context.user_data['state'] = None
+        await update.message.reply_text("✏️ Введите термин после команды. Пример:\n/terms гипертония")
         return
 
     term = " ".join(context.args).lower()
     if term in MEDICAL_TERMS:
         await update.message.reply_text(f"📖 {term.capitalize()}:\n{MEDICAL_TERMS[term]}")
     else:
-        await update.message.reply_text("Термин не найден.")
+        await update.message.reply_text("❌ Термин не найден в справочнике.")
 
 async def codes_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data['state'] = None  # сбрасываем состояние
     if not context.args:
-        await update.message.reply_text("Введите код МКБ-10 (например, J45), чтобы получить расшифровку.")
-        context.user_data['state'] = None
+        await update.message.reply_text("✏️ Введите код МКБ-10 после команды. Пример:\n/codes J45")
         return
 
     code = context.args[0].upper()
     if code in ICD_CODES:
         await update.message.reply_text(f"📘 Код {code}:\n{ICD_CODES[code]}")
     else:
-        await update.message.reply_text("Код не найден. Убедитесь в корректности ввода.")
+        await update.message.reply_text("❌ Код не найден. Проверьте правильность ввода.")
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
