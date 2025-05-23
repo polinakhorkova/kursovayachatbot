@@ -2,9 +2,8 @@ import os
 from openpyxl import load_workbook
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes, MessageHandler, filters
-from datetime import datetime
+from datetime import datetime, date
 import psycopg2
-from datetime import date
 
 class ConversationState:
     WAITING_FOR_FIO = 1
@@ -47,6 +46,27 @@ def load_icd_codes():
         print(f"Ошибка загрузки codes.xlsx: {e}")
         return {}
 
+def load_disease_data():
+    disease_data = []
+    try:
+        file_path = os.path.join(os.path.dirname(__file__), "razmetka.xlsx")
+        wb = load_workbook(filename=file_path)
+        sheet = wb.active
+        for row in sheet.iter_rows(min_row=2, values_only=True):
+            disease_data.append({
+                "code": row[0],
+                "name": row[1],
+                "symptoms": row[2].lower() if row[2] else "",
+                "diagnostics": row[3],
+                "treatment": row[4],
+                "related": row[5]
+            })
+        return disease_data
+    except Exception as e:
+        print(f"Ошибка загрузки razmetka.xlsx: {e}")
+        return []
+
+DISEASE_DATA = load_disease_data()
 MEDICAL_TERMS = load_medical_terms()
 ICD_CODES = load_icd_codes()
 
@@ -64,6 +84,37 @@ def test_db_connection():
         conn.close()
     except Exception as e:
         print(f"Ошибка подключения к БД: {e}")
+
+def insert_diagnosis(patient_id, code, name, description, diagnosis_date, appointment_date, justification, recommendations):
+    try:
+        conn = psycopg2.connect(
+            dbname="postgres",
+            user="myuser",
+            password="polina",
+            host="192.168.0.6",
+            port="5432"
+        )
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO диагнозы (
+                пациент_id, код_мкб_10, название_заболевания,
+                описание_диагноза, дата_обращения, дата_постановки,
+                обоснование_диагноза, клинические_рекоменлации
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s);
+            """,
+            (patient_id, code, name, description, diagnosis_date, appointment_date, justification, recommendations)
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+        print(f"Диагноз успешно добавлен для пациента {patient_id}.")
+        return True
+    except Exception as e:
+        print(f"Ошибка при вставке диагноза: {e}")
+        return False
+
+#вставка диагоза починить
 
 def insert_patient_basic(fio, birth_date):
     try:
@@ -267,9 +318,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if len(text) > 255:
             await update.message.reply_text("Длина текста не должна превышать 255 символов. Пожалуйста, сократите сообщение.")
             return
-        context.user_data['complaints'] = text
+        context.user_data['complaints'] = text.lower()
 
-        # Сохраняем анамнез в базу
+        # Сопоставление симптомов
+        found_diseases = []
+        for disease in DISEASE_DATA:
+            if all(symptom.strip() in context.user_data['complaints'] for symptom in disease['symptoms'].split(", ")):
+                found_diseases.append(disease)
+
+        # Сохраняем анамнез
         success = insert_anamnesis(
             context.user_data['patient_id'],
             context.user_data.get('medical_history', ''),
@@ -284,7 +341,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await update.message.reply_text("Произошла ошибка при сохранении анамнеза.")
 
+        # Вывод найденных заболеваний
+        if found_diseases:
+            for disease in found_diseases:
+                await update.message.reply_text(
+                    f"🔍 Обнаружено соответствие заболеванию:\n"
+                    f"📌 Название: {disease['name']}\n"
+                   # f"🩺 Симптомы: {disease['symptoms']}\n"
+                    f"🧪 Диагностика: {disease['diagnostics']}\n"
+                    f"💊 Лечение: {disease['treatment']}\n"
+                    f"🔗 Связанные заболевания: {disease['related']}"
+                )
+        else:
+            await update.message.reply_text("❗️ Не удалось найти заболевание по указанным жалобам.")
+
         context.user_data.clear()
+
 
     else:
         await update.message.reply_text("Пожалуйста, начните с команды /start")
